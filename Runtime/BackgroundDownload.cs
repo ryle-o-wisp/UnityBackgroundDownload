@@ -177,6 +177,24 @@ namespace Unity.Networking
             }
         }
 
+        public static BackgroundDownload[] Start(params BackgroundDownloadConfig[] configs)
+        {
+            lock (typeof(BackgroundDownload))
+            {
+                LoadDownloads();
+
+                foreach (var config in configs)
+                {
+                    if (_downloads.ContainsKey(config.filePath))
+                        throw new ArgumentException($"Download of {config.filePath} is already present");
+                    var download = new BackgroundDownloadimpl(config);
+                    _downloads.Add(config.filePath, download);
+                }
+                SaveDownloads();
+                return backgroundDownloads;
+            }
+        }
+
         protected BackgroundDownload()
         {
         }
