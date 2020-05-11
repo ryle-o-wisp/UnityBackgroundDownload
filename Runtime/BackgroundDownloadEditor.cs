@@ -4,6 +4,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Net.Http;
+using System.Threading;
 using UnityEngine;
 
 namespace Unity.Networking
@@ -12,6 +13,7 @@ namespace Unity.Networking
 	{
 		static HttpClient _client;
 		float _progress;
+		private readonly CancellationTokenSource _tokenSource;
 
 		[RuntimeInitializeOnLoadMethod]
 		static void Init()
@@ -22,6 +24,7 @@ namespace Unity.Networking
 		public BackgroundDownloadEditor(BackgroundDownloadConfig config)
 			: base(config)
 		{
+			_tokenSource = new CancellationTokenSource();
 			Start(config);
 		}
 
@@ -34,12 +37,15 @@ namespace Unity.Networking
 			var persistentFilePath = Path.Combine(_persistentDataPath, config.filePath);
 			try
 			{
-				using (var str = await _client.GetStreamAsync(_config.url))
-				using (var stream = new FileStream(persistentFilePath, FileMode.Create, FileAccess.Write, FileShare.None))
+				using (var response = await _client.GetAsync(_config.url, HttpCompletionOption.ResponseHeadersRead, _tokenSource.Token))
 				{
-					await str.CopyToAsync(stream);
-				}
+					response.EnsureSuccessStatusCode();
 
+					using (var stream = new FileStream(persistentFilePath, FileMode.Create, FileAccess.Write, FileShare.None))
+					{
+						await response.Content.CopyToAsync(stream);
+					}
+				}
 				_progress = 1f;
 				_status = BackgroundDownloadStatus.Done;
 				_error = "";
@@ -62,7 +68,13 @@ namespace Unity.Networking
 
 		internal static void SaveDownloads(Dictionary<string, BackgroundDownload> downloads) { }
 
-		public override void Dispose() { base.Dispose(); }
+		public override void Dispose()
+		{
+			_tokenSource.Cancel();
+			_tokenSource.Dispose();
+
+			base.Dispose();
+		}
 	}
 }
 
