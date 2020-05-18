@@ -12,8 +12,8 @@ namespace Unity.Networking
 	class BackgroundDownloadEditor : BackgroundDownload
 	{
 		static HttpClient _client;
-		float _progress;
 		private readonly CancellationTokenSource _tokenSource;
+		private long _contentLength;
 
 		[RuntimeInitializeOnLoadMethod]
 		static void Init()
@@ -32,7 +32,7 @@ namespace Unity.Networking
 		{
 			_status = BackgroundDownloadStatus.Downloading;
 			_error = "";
-			_progress = 0f;
+			_contentLength = 0u;
 
 			var persistentFilePath = Path.Combine(Application.persistentDataPath, config.filePath);
 			try
@@ -41,12 +41,14 @@ namespace Unity.Networking
 				{
 					response.EnsureSuccessStatusCode();
 
+					_contentLength = response.Content.Headers.ContentLength ?? 0;
+
 					using (var stream = new FileStream(persistentFilePath, FileMode.Create, FileAccess.Write, FileShare.None))
 					{
 						await response.Content.CopyToAsync(stream);
 					}
 				}
-				_progress = 1f;
+
 				_status = BackgroundDownloadStatus.Done;
 				_error = "";
 			}
@@ -59,7 +61,17 @@ namespace Unity.Networking
 
 		public override bool keepWaiting => _status == BackgroundDownloadStatus.Downloading;
 
-		protected override float GetProgress() => _progress;
+		protected override float GetProgress()
+		{
+			if (_status != BackgroundDownloadStatus.Downloading) return 1.0f;
+
+			var file = new FileInfo(Path.Combine(Application.persistentDataPath, config.filePath));
+			if (file.Exists && _contentLength > 0)
+			{
+				return (float) file.Length / _contentLength;
+			}
+			return 0f;
+		}
 
 		internal static Dictionary<string, BackgroundDownload> LoadDownloads()
 		{
