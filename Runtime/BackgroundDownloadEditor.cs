@@ -34,7 +34,7 @@ namespace Unity.Networking
 			_error = "";
 			_progress = 0f;
 
-			var persistentFilePath = Path.Combine(_persistentDataPath, config.filePath);
+			var persistentFilePath = Path.Combine(Application.persistentDataPath, config.filePath);
 			try
 			{
 				using (var response = await _client.GetAsync(_config.url, HttpCompletionOption.ResponseHeadersRead, _tokenSource.Token))
