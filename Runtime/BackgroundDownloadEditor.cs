@@ -5,20 +5,25 @@ using System.Collections.Generic;
 using System.IO;
 using System.Net.Http;
 using System.Threading;
+using UnityEditor;
 using UnityEngine;
 
 namespace Unity.Networking
 {
 	class BackgroundDownloadEditor : BackgroundDownload
 	{
-		static HttpClient _client;
-		private readonly CancellationTokenSource _tokenSource;
+		private static HttpClient _client;
+		private CancellationTokenSource _tokenSource;
 		private long _contentLength;
 
 		[RuntimeInitializeOnLoadMethod]
 		static void Init()
 		{
 			_client = new HttpClient();
+			EditorApplication.playModeStateChanged += change =>
+			{
+				if (change == PlayModeStateChange.ExitingPlayMode) _client.Dispose();
+			};
 		}
 
 		public BackgroundDownloadEditor(BackgroundDownloadConfig config)
@@ -37,15 +42,18 @@ namespace Unity.Networking
 			var persistentFilePath = Path.Combine(Application.persistentDataPath, config.filePath);
 			try
 			{
-				using (var response = await _client.GetAsync(_config.url, HttpCompletionOption.ResponseHeadersRead, _tokenSource.Token))
+				var token = _tokenSource.Token;
+
+				using (var response = await _client.GetAsync(_config.url, HttpCompletionOption.ResponseHeadersRead, token))
 				{
 					response.EnsureSuccessStatusCode();
 
 					_contentLength = response.Content.Headers.ContentLength ?? 0;
 
-					using (var stream = new FileStream(persistentFilePath, FileMode.Create, FileAccess.Write, FileShare.None))
+					using (var target = new FileStream(persistentFilePath, FileMode.Create, FileAccess.Write, FileShare.None))
+					using (var stream = await response.Content.ReadAsStreamAsync())
 					{
-						await response.Content.CopyToAsync(stream);
+						await stream.CopyToAsync(target, 4096, token);
 					}
 				}
 
@@ -82,8 +90,9 @@ namespace Unity.Networking
 
 		public override void Dispose()
 		{
-			_tokenSource.Cancel();
-			_tokenSource.Dispose();
+			_tokenSource?.Cancel();
+			_tokenSource?.Dispose();
+			_tokenSource = null;
 
 			base.Dispose();
 		}
