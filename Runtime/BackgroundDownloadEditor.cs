@@ -50,7 +50,7 @@ namespace Unity.Networking
 
 					_contentLength = response.Content.Headers.ContentLength ?? 0;
 
-					using (var target = new FileStream(persistentFilePath, FileMode.Create, FileAccess.Write, FileShare.None))
+					using (var target = new FileStream(persistentFilePath, FileMode.Create, FileAccess.Write, FileShare.ReadWrite | FileShare.Delete))
 					using (var stream = await response.Content.ReadAsStreamAsync())
 					{
 						await stream.CopyToAsync(target, 4096, token);
@@ -93,6 +93,11 @@ namespace Unity.Networking
 			_tokenSource?.Cancel();
 			_tokenSource?.Dispose();
 			_tokenSource = null;
+
+			if (_status != BackgroundDownloadStatus.Done)
+			{
+				File.Delete(Path.Combine(Application.persistentDataPath, config.filePath));
+			}
 
 			base.Dispose();
 		}
