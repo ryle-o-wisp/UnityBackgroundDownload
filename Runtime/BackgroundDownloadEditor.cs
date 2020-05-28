@@ -30,16 +30,16 @@ namespace Unity.Networking
 			: base(config)
 		{
 			_tokenSource = new CancellationTokenSource();
-			Start(config);
+			StartDownloading();
 		}
 
-		private async void Start(BackgroundDownloadConfig config)
+		private async void StartDownloading()
 		{
 			_status = BackgroundDownloadStatus.Downloading;
 			_error = "";
 			_contentLength = 0u;
 
-			var persistentFilePath = Path.Combine(Application.persistentDataPath, config.filePath);
+			var persistentFilePath = Path.Combine(Application.persistentDataPath, _config.filePath);
 			try
 			{
 				var token = _tokenSource.Token;
