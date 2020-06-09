@@ -3,6 +3,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Net;
 using System.Net.Http;
 using System.Threading;
 using UnityEditor;
@@ -20,6 +21,9 @@ namespace Unity.Networking
 		static void Init()
 		{
 			_client = new HttpClient();
+			_client.Timeout = TimeSpan.FromDays(1);
+			ServicePointManager.DefaultConnectionLimit = 6;
+
 			EditorApplication.playModeStateChanged += change =>
 			{
 				if (change == PlayModeStateChange.ExitingPlayMode) _client.Dispose();
