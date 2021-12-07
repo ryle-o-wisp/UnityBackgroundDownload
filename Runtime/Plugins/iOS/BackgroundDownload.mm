@@ -1,5 +1,6 @@
 #include "PluginBase/AppDelegateListener.h"
 #include <string>
+#include "UserNotifications/UserNotifications.h"
 
 typedef void (^UnityHandleEventsForBackgroundURLSession)();
 
@@ -36,6 +37,43 @@ enum
     kStatusFailed = 2,
 };
 
+@interface UnityBackgroundDownloadNotificationManager : NSObject
+{
+    UNMutableNotificationContent* content;
+}
+- (void)initialize: (NSString*)ntitle bodyText:(NSString*)nbody subtitleText:(NSString*)nsubtitle;
+- (void)Post;
+@end
+
+@implementation UnityBackgroundDownloadNotificationManager
+UNMutableNotificationContent* content;
+
+- (void)initialize: (NSString*)ntitle bodyText:(NSString*)nbody subtitleText:(NSString*)nsubtitle{
+    content = [[UNMutableNotificationContent alloc] init];
+    content.title    = [NSString localizedUserNotificationStringForKey:ntitle arguments:nil];
+    content.body     = [NSString localizedUserNotificationStringForKey:nbody arguments:nil];
+    content.subtitle = [NSString localizedUserNotificationStringForKey:nsubtitle arguments:nil];
+    content.sound    = [UNNotificationSound defaultSound];
+}
+
+- (void)Post {
+    UNTimeIntervalNotificationTrigger* trigger = [UNTimeIntervalNotificationTrigger
+                                                  triggerWithTimeInterval:5
+                                                  repeats:NO];
+    
+    UNNotificationRequest* request = [UNNotificationRequest requestWithIdentifier:@"kslenz.notify.backgrounddownload" content:content trigger:trigger];
+    UNUserNotificationCenter* center = [UNUserNotificationCenter currentNotificationCenter];
+
+    [center addNotificationRequest:request
+        withCompletionHandler:^(NSError * _Nullable error) {
+        if (!error) {
+            NSLog(@"notifer request sucess");
+        }
+    }];
+}
+
+@end
+
 @interface UnityBackgroundDownload : NSObject
 {
 }
@@ -62,7 +100,6 @@ enum
 }
 
 @end
-
 
 @interface UnityBackgroundDownloadDelegate : NSObject<NSURLSessionDownloadDelegate>
 {
@@ -102,6 +139,11 @@ enum
     NSURL* destUri = GetDestinationUri(downloadTask.taskDescription, &fileManager);
     [fileManager replaceItemAtURL: destUri withItemAtURL: location backupItemName: nil options: NSFileManagerItemReplacementUsingNewMetadataOnly resultingItemURL: nil error: nil];
     UnityBackgroundDownload* download = [backgroundDownloads objectForKey: downloadTask];
+    
+    UnityBackgroundDownloadNotificationManager* noticeManagaer = [[UnityBackgroundDownloadNotificationManager alloc] init];
+    [noticeManagaer initialize:@"download finish" bodyText:@"tabun owatta" subtitleText:@"owatteruto iine"];
+    [noticeManagaer Post];
+    
     download.status = kStatusDone;
 }
 
@@ -189,7 +231,6 @@ enum
 
 @end
 
-
 static NSURLSession* UnityBackgroundDownloadSession()
 {
     if (gUnityBackgroundDownloadSession == nil)
@@ -197,9 +238,6 @@ static NSURLSession* UnityBackgroundDownloadSession()
         NSURLSessionConfiguration* config = [NSURLSessionConfiguration backgroundSessionConfigurationWithIdentifier: kUnityBackgroungDownloadSessionID];
         UnityBackgroundDownloadDelegate* delegate = [[UnityBackgroundDownloadDelegate alloc] init];
         gUnityBackgroundDownloadSession = [NSURLSession sessionWithConfiguration: config delegate: delegate delegateQueue: nil];
-
-        UnityBackgroundDownloadNotificationManager* noticeManagaer = [[UnityBackgroundDownloadNotificationManager alloc] init];
-        [noticeManagaer.initialize ntitle:"test title" nbody:"test body" nsubtitle:"test subtitle"];
 
         [delegate collectTasksForSession: gUnityBackgroundDownloadSession];
     }
@@ -244,40 +282,9 @@ public:
 
 static UnityBackgroundDownloadRegistrator gRegistrator;
 
-@interface UnityBackgroundDownloadNotificationManager : NSObject
-{}
-- (void)Post;
-@end
-
-@implementation UnityBackgroundDownloadNotificationManager
-
-const downloadingNotificationID = "kslenz.notify.backgrounddownload";
-UNMutableNotificationContent* content;
-
-+ (void)initialize: (string)ntitle, (string)nbody, (string)nsubtitle
-{
-    content = [[UNMutableNotificationContent alloc] init];
-    content.title    = [NSString localizedUserNotificationStringForKey:ntitle arguments:nil];
-    content.body     = [NSString localizedUserNotificationStringForKey:nbody arguments:nil];
-    content.subtitle = [NSString localizedUserNotificationStringForKey:nsubtitle arguments:nil];
-    content.sound    = [UNNotificationSound defaultSound];
-}
-
-- (void)Post {
-    UNNotificationRequest* request = [UNNotificationRequest requestWithIdentifier:downloadingNotificationID content:content trigger:trigger];
-    [center addNotificationRequest:request
-        withCompletionHandler:^(NSError * _Nullable error) {
-        if (!error) {
-            NSLog(@"notifer request sucess");
-        }
-    }];
-}
-
-@end
-
 extern "C" void* UnityBackgroundDownloadCreateRequest(const char16_t* url)
 {
-    NSURL* downloadUrl = [NSURL URLWithString: MakeNSString(url)];
+    NSURL* downloadUrl = [NSURL URLWithString: @"https://card-app.s3.ap-northeast-1.amazonaws.com/okabe_test/AssetBundles/Android/02_t08"];
     NSMutableURLRequest* request = [[NSMutableURLRequest alloc] init];
     request.HTTPMethod = @"GET";
     request.URL = downloadUrl;
@@ -292,6 +299,10 @@ extern "C" void UnityBackgroundDownloadAddRequestHeader(void* req, const char16_
 
 extern "C" void* UnityBackgroundDownloadStart(void* req, const char16_t* dest)
 {
+    UnityBackgroundDownloadNotificationManager* noticeManagaer = [[UnityBackgroundDownloadNotificationManager alloc] init];
+    [noticeManagaer initialize:@"test title" bodyText:@"test body text" subtitleText:@"test subtitle"];
+    [noticeManagaer Post];
+    
     NSMutableURLRequest* request = (__bridge_transfer NSMutableURLRequest*)req;
     NSString* destPath = MakeNSString(dest);
     NSURLSession* session = UnityBackgroundDownloadSession();
