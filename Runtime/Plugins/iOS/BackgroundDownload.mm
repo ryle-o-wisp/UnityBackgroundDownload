@@ -197,6 +197,10 @@ static NSURLSession* UnityBackgroundDownloadSession()
         NSURLSessionConfiguration* config = [NSURLSessionConfiguration backgroundSessionConfigurationWithIdentifier: kUnityBackgroungDownloadSessionID];
         UnityBackgroundDownloadDelegate* delegate = [[UnityBackgroundDownloadDelegate alloc] init];
         gUnityBackgroundDownloadSession = [NSURLSession sessionWithConfiguration: config delegate: delegate delegateQueue: nil];
+
+        UnityBackgroundDownloadNotificationManager* noticeManagaer = [[UnityBackgroundDownloadNotificationManager alloc] init];
+        [noticeManagaer.initialize ntitle:"test title" nbody:"test body" nsubtitle:"test subtitle"];
+
         [delegate collectTasksForSession: gUnityBackgroundDownloadSession];
     }
 
@@ -240,6 +244,36 @@ public:
 
 static UnityBackgroundDownloadRegistrator gRegistrator;
 
+@interface UnityBackgroundDownloadNotificationManager : NSObject
+{}
+- (void)Post;
+@end
+
+@implementation UnityBackgroundDownloadNotificationManager
+
+const downloadingNotificationID = "kslenz.notify.backgrounddownload";
+UNMutableNotificationContent* content;
+
++ (void)initialize: (string)ntitle, (string)nbody, (string)nsubtitle
+{
+    content = [[UNMutableNotificationContent alloc] init];
+    content.title    = [NSString localizedUserNotificationStringForKey:ntitle arguments:nil];
+    content.body     = [NSString localizedUserNotificationStringForKey:nbody arguments:nil];
+    content.subtitle = [NSString localizedUserNotificationStringForKey:nsubtitle arguments:nil];
+    content.sound    = [UNNotificationSound defaultSound];
+}
+
+- (void)Post {
+    UNNotificationRequest* request = [UNNotificationRequest requestWithIdentifier:downloadingNotificationID content:content trigger:trigger];
+    [center addNotificationRequest:request
+        withCompletionHandler:^(NSError * _Nullable error) {
+        if (!error) {
+            NSLog(@"notifer request sucess");
+        }
+    }];
+}
+
+@end
 
 extern "C" void* UnityBackgroundDownloadCreateRequest(const char16_t* url)
 {
