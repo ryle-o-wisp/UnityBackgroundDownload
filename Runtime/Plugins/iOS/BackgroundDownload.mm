@@ -284,7 +284,7 @@ static UnityBackgroundDownloadRegistrator gRegistrator;
 
 extern "C" void* UnityBackgroundDownloadCreateRequest(const char16_t* url)
 {
-    NSURL* downloadUrl = [NSURL URLWithString: @"https://card-app.s3.ap-northeast-1.amazonaws.com/okabe_test/AssetBundles/Android/02_t08"];
+    NSURL* downloadUrl = [NSURL URLWithString: MakeNSString(url)];
     NSMutableURLRequest* request = [[NSMutableURLRequest alloc] init];
     request.HTTPMethod = @"GET";
     request.URL = downloadUrl;
