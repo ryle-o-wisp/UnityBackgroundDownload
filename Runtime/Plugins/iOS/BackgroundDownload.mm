@@ -1,5 +1,6 @@
 #include "PluginBase/AppDelegateListener.h"
 #include <string>
+#include "UserNotifications/UserNotifications.h"
 
 typedef void (^UnityHandleEventsForBackgroundURLSession)();
 
@@ -29,12 +30,106 @@ static int32_t NSStringToUTF16(NSString* str, void* buffer, unsigned size)
     return converted ? (int32_t)ret : 0;
 }
 
+
+static NSString* GetJPText(NSString* code) {
+    if([code isEqualToString:@"CODE_1_DOWNLOADING_ITEM_TITLE"]) {
+        return @"ARをダウンロードしています";
+    }
+    
+    if([code isEqualToString:@"CODE_1_DOWNLOADING_MULTI_ITEMS_BODY"]) {
+        return  @"%d件のダウンロードが進行中です";
+    }
+    
+    if([code isEqualToString:@"CODE_1_DOWNLOADING_AN_ITEM_BODY"]) {
+        return  @"1件のダウンロードが進行中です";
+    }
+    
+    if([code isEqualToString:@"CODE_2_DOWNLOADING_COMPLETE_TITLE"]) {
+        return @"ダウンロードが完了しました！";
+    }
+    
+    if([code isEqualToString:@"CODE_2_DOWNLOADING_COMPLETE_BODY"]) {
+        return @"全てのダウンロードが完了しました！";
+    }
+    
+    return @"";
+}
+
+static NSString* GetENText(NSString* code) {
+    if([code isEqualToString:@"CODE_1_DOWNLOADING_ITEM_TITLE"]) {
+        return @"Now downloading...";
+    }
+    
+    if([code isEqualToString:@"CODE_1_DOWNLOADING_MULTI_ITEMS_BODY"]) {
+        return  @"Downloading %d items.";
+    }
+    
+    if([code isEqualToString:@"CODE_1_DOWNLOADING_AN_ITEM_BODY"]) {
+        return  @"Downloading an item.";
+    }
+    
+    if([code isEqualToString:@"CODE_2_DOWNLOADING_COMPLETE_TITLE"]) {
+        return @"Downloading complete!";
+    }
+    
+    if([code isEqualToString:@"CODE_2_DOWNLOADING_COMPLETE_BODY"]) {
+        return @"All of download tasks are completed.";
+    }
+    
+    return @"";
+}
+
+static NSString* GetText(NSString* code) {
+    if([NSLocale.preferredLanguages[0] hasPrefix:@"ja-"]) {
+        return GetJPText(code);
+    } else {
+        return GetENText(code);
+    }
+}
+
 enum
 {
     kStatusDownloading = 0,
     kStatusDone = 1,
     kStatusFailed = 2,
 };
+
+@interface UnityBackgroundDownloadNotificationManager : NSObject
+{
+    UNMutableNotificationContent* content;
+}
+- (void)initialize: (NSString*)ntitle bodyText:(NSString*)nbody subtitleText:(NSString*)nsubtitle;
+- (void)Post;
+@end
+
+@implementation UnityBackgroundDownloadNotificationManager
+UNMutableNotificationContent* content;
+
+- (void)initialize: (NSString*)ntitle bodyText:(NSString*)nbody subtitleText:(NSString*)nsubtitle{
+    content = [[UNMutableNotificationContent alloc] init];
+    content.title    = [NSString localizedUserNotificationStringForKey:ntitle arguments:nil];
+    content.body     = [NSString localizedUserNotificationStringForKey:nbody arguments:nil];
+    content.subtitle = [NSString localizedUserNotificationStringForKey:nsubtitle arguments:nil];
+    content.sound    = [UNNotificationSound defaultSound];
+}
+
+- (void)Post {
+    UNTimeIntervalNotificationTrigger* trigger = [UNTimeIntervalNotificationTrigger
+                                                  triggerWithTimeInterval:5
+                                                  repeats:NO];
+    
+    UNNotificationRequest* request = [UNNotificationRequest requestWithIdentifier:@"kslenz.notify.backgrounddownload" content:content trigger:trigger];
+    UNUserNotificationCenter* center = [UNUserNotificationCenter currentNotificationCenter];
+
+    [center addNotificationRequest:request
+        withCompletionHandler:^(NSError * _Nullable error) {
+        if (!error) {
+            NSLog(@"notifer request sucess");
+        }
+    }];
+}
+
+@end
 
 @interface UnityBackgroundDownload : NSObject
 {
@@ -62,7 +157,6 @@ enum
 }
 
 @end
-
 
 @interface UnityBackgroundDownloadDelegate : NSObject<NSURLSessionDownloadDelegate>
 {
@@ -102,6 +196,28 @@ enum
     NSURL* destUri = GetDestinationUri(downloadTask.taskDescription, &fileManager);
     [fileManager replaceItemAtURL: destUri withItemAtURL: location backupItemName: nil options: NSFileManagerItemReplacementUsingNewMetadataOnly resultingItemURL: nil error: nil];
     UnityBackgroundDownload* download = [backgroundDownloads objectForKey: downloadTask];
+   
+    /* 通知処理 */
+    UnityBackgroundDownloadDelegate* delegate = (UnityBackgroundDownloadDelegate*)session.delegate;
+    UnityBackgroundDownloadNotificationManager* noticeManagaer = [[UnityBackgroundDownloadNotificationManager alloc] init];
+    NSString* titleText = GetText(@"CODE_1_DOWNLOADING_ITEM_TITLE");
+    NSString* bodyText;
+    unsigned long nowTasksCount = [delegate taskCount] - 1;
+    
+    if(delegate == nil || nowTasksCount <= 0) {
+        titleText = GetText(@"CODE_2_DOWNLOADING_COMPLETE_TITLE");
+        bodyText = GetText(@"CODE_2_DOWNLOADING_COMPLETE_BODY");
+    }
+    else if(nowTasksCount == 1) {
+        bodyText = GetText(@"CODE_1_DOWNLOADING_AN_ITEM_BODY");
+    } else {
+        bodyText = [NSString stringWithFormat:GetText(@"CODE_1_DOWNLOADING_MULTI_ITEMS_BODY"), nowTasksCount];
+    }
+
+    [noticeManagaer initialize:titleText bodyText:bodyText subtitleText:@""];
+    [noticeManagaer Post];
+    /* 通知処理ここまで */
+    
     download.status = kStatusDone;
 }
 
@@ -189,7 +305,6 @@ enum
 
 @end
 
-
 static NSURLSession* UnityBackgroundDownloadSession()
 {
     if (gUnityBackgroundDownloadSession == nil)
@@ -197,6 +312,7 @@ static NSURLSession* UnityBackgroundDownloadSession()
         NSURLSessionConfiguration* config = [NSURLSessionConfiguration backgroundSessionConfigurationWithIdentifier: kUnityBackgroungDownloadSessionID];
         UnityBackgroundDownloadDelegate* delegate = [[UnityBackgroundDownloadDelegate alloc] init];
         gUnityBackgroundDownloadSession = [NSURLSession sessionWithConfiguration: config delegate: delegate delegateQueue: nil];
+
         [delegate collectTasksForSession: gUnityBackgroundDownloadSession];
     }
 
@@ -240,7 +356,6 @@ public:
 
 static UnityBackgroundDownloadRegistrator gRegistrator;
 
-
 extern "C" void* UnityBackgroundDownloadCreateRequest(const char16_t* url)
 {
     NSURL* downloadUrl = [NSURL URLWithString: MakeNSString(url)];
@@ -262,6 +377,22 @@ extern "C" void* UnityBackgroundDownloadStart(void* req, const char16_t* dest)
     NSString* destPath = MakeNSString(dest);
     NSURLSession* session = UnityBackgroundDownloadSession();
     UnityBackgroundDownloadDelegate* delegate = (UnityBackgroundDownloadDelegate*)session.delegate;
+    
+    /* 通知処理 */
+    UnityBackgroundDownloadNotificationManager* noticeManagaer = [[UnityBackgroundDownloadNotificationManager alloc] init];
+    NSString* bodyText;
+    unsigned long taskCount = [delegate taskCount];
+    
+    if(taskCount == 0) {
+        bodyText = GetText(@"CODE_1_DOWNLOADING_AN_ITEM_BODY");
+    } else {
+        bodyText = [NSString stringWithFormat:GetText(@"CODE_1_DOWNLOADING_MULTI_ITEMS_BODY"), taskCount + 1];
+    }
+    
+    [noticeManagaer initialize:GetText(@"CODE_1_DOWNLOADING_ITEM_TITLE") bodyText:bodyText subtitleText:@""];
+    [noticeManagaer Post];
+    /* 通知処理ここまで */
+    
     NSURLSessionDownloadTask *task = [delegate newSessionTask: session withRequest: request forDestination: destPath];
     [task resume];
     return (__bridge void*)task;
@@ -331,3 +462,4 @@ extern "C" void UnityBackgroundDownloadDestroy(void* download)
     UnityBackgroundDownloadDelegate* delegate = (UnityBackgroundDownloadDelegate*)session.delegate;
     [delegate removeTask: task];
 }
+
