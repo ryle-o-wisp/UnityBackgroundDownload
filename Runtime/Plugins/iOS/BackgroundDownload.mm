@@ -30,6 +30,65 @@ static int32_t NSStringToUTF16(NSString* str, void* buffer, unsigned size)
     return converted ? (int32_t)ret : 0;
 }
 
+
+static NSString* GetJPText(NSString* code) {
+    if([code isEqualToString:@"CODE_1_DOWNLOADING_ITEM_TITLE"]) {
+        return @"ARをダウンロードしています";
+    }
+    
+    if([code isEqualToString:@"CODE_1_DOWNLOADING_MULTI_ITEMS_BODY"]) {
+        return  @"%d件のダウンロードが進行中です";
+    }
+    
+    if([code isEqualToString:@"CODE_1_DOWNLOADING_AN_ITEM_BODY"]) {
+        return  @"1件のダウンロードが進行中です";
+    }
+    
+    if([code isEqualToString:@"CODE_2_DOWNLOADING_COMPLETE_TITLE"]) {
+        return @"ダウンロードが完了しました！";
+    }
+    
+    if([code isEqualToString:@"CODE_2_DOWNLOADING_COMPLETE_BODY"]) {
+        return @"全てのダウンロードが完了しました！";
+    }
+    
+    return @"";
+}
+
+static NSString* GetENText(NSString* code) {
+    if([code isEqualToString:@"CODE_1_DOWNLOADING_ITEM_TITLE"]) {
+        return @"Now downloading...";
+    }
+    
+    if([code isEqualToString:@"CODE_1_DOWNLOADING_MULTI_ITEMS_BODY"]) {
+        return  @"Downloading %d items.";
+    }
+    
+    if([code isEqualToString:@"CODE_1_DOWNLOADING_AN_ITEM_BODY"]) {
+        return  @"Downloading an item.";
+    }
+    
+    if([code isEqualToString:@"CODE_2_DOWNLOADING_COMPLETE_TITLE"]) {
+        return @"Downloading complete!";
+    }
+    
+    if([code isEqualToString:@"CODE_2_DOWNLOADING_COMPLETE_BODY"]) {
+        return @"All of download tasks are completed.";
+    }
+    
+    return @"";
+}
+
+static NSString* GetText(NSString* code) {
+    if([NSLocale.preferredLanguages[0] hasPrefix:@"ja-"]) {
+        return GetJPText(code);
+    } else {
+        return GetENText(code);
+    }
+}
+
+static int currentDownloading = 0;
+
 enum
 {
     kStatusDownloading = 0,
@@ -139,10 +198,14 @@ UNMutableNotificationContent* content;
     NSURL* destUri = GetDestinationUri(downloadTask.taskDescription, &fileManager);
     [fileManager replaceItemAtURL: destUri withItemAtURL: location backupItemName: nil options: NSFileManagerItemReplacementUsingNewMetadataOnly resultingItemURL: nil error: nil];
     UnityBackgroundDownload* download = [backgroundDownloads objectForKey: downloadTask];
-    
-    UnityBackgroundDownloadNotificationManager* noticeManagaer = [[UnityBackgroundDownloadNotificationManager alloc] init];
-    [noticeManagaer initialize:@"download finish" bodyText:@"tabun owatta" subtitleText:@"owatteruto iine"];
-    [noticeManagaer Post];
+   
+    currentDownloading--; 
+    if(currentDownloading == 0) {
+
+        UnityBackgroundDownloadNotificationManager* noticeManagaer = [[UnityBackgroundDownloadNotificationManager alloc] init];
+        [noticeManagaer initialize:GetText(@"CODE_2_DOWNLOADING_COMPLETE_TITLE") bodyText:GetText(@"CODE_2_DOWNLOADING_COMPLETE_BODY") subtitleText:@""];
+        [noticeManagaer Post];
+    }
     
     download.status = kStatusDone;
 }
@@ -299,8 +362,19 @@ extern "C" void UnityBackgroundDownloadAddRequestHeader(void* req, const char16_
 
 extern "C" void* UnityBackgroundDownloadStart(void* req, const char16_t* dest)
 {
+    currentDownloading++;
+
     UnityBackgroundDownloadNotificationManager* noticeManagaer = [[UnityBackgroundDownloadNotificationManager alloc] init];
-    [noticeManagaer initialize:@"test title" bodyText:@"test body text" subtitleText:@"test subtitle"];
+
+    NSString* bodyText;
+
+    if(currentDownloading == 1) {
+        bodyText = GetText(@"CODE_1_DOWNLOADING_AN_ITEM_BODY");
+    } else {
+        bodyText = [NSString stringWithFormat:GetText(@"CODE_1_DOWNLOADING_MULTI_ITEMS_BODY"), currentDownloading];
+    }
+
+    [noticeManagaer initialize:GetText(@"CODE_1_DOWNLOADING_ITEM_TITLE") bodyText:bodyText subtitleText:@""];
     [noticeManagaer Post];
     
     NSMutableURLRequest* request = (__bridge_transfer NSMutableURLRequest*)req;
