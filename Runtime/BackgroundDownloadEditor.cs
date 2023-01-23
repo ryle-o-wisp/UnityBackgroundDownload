@@ -48,17 +48,23 @@ namespace Unity.Networking
 			{
 				var token = _tokenSource.Token;
 
-				using (var response = await _client.GetAsync(_config.url, HttpCompletionOption.ResponseHeadersRead, token))
+				if (_config.url.ToString().StartsWith("file://"))
 				{
+					var sourceFilePath = _config.url.ToString()["file://".Length..];
+					await using var target = new FileStream(persistentFilePath, FileMode.Create, FileAccess.Write, FileShare.ReadWrite | FileShare.Delete);
+					await using var source = new FileStream(sourceFilePath, FileMode.Open, FileAccess.Read, FileShare.Read);
+					await source.CopyToAsync(target, 4096, token);
+				}
+				else
+				{
+					using var response = await _client.GetAsync(_config.url, HttpCompletionOption.ResponseHeadersRead, token);
 					response.EnsureSuccessStatusCode();
 
 					_contentLength = response.Content.Headers.ContentLength ?? 0;
 
-					using (var target = new FileStream(persistentFilePath, FileMode.Create, FileAccess.Write, FileShare.ReadWrite | FileShare.Delete))
-					using (var stream = await response.Content.ReadAsStreamAsync())
-					{
-						await stream.CopyToAsync(target, 4096, token);
-					}
+					await using var target = new FileStream(persistentFilePath, FileMode.Create, FileAccess.Write, FileShare.ReadWrite | FileShare.Delete);
+					await using var stream = await response.Content.ReadAsStreamAsync();
+					await stream.CopyToAsync(target, 4096, token);
 				}
 
 				_status = BackgroundDownloadStatus.Done;
