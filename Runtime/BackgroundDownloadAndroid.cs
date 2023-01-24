@@ -116,7 +116,7 @@ namespace Unity.Networking
             }
             catch (Exception e)
             {
-                Debug.LogError(string.Format("Failed to recreate background download with id {0}: {1}", id, e.Message));
+                Debug.LogWarningFormat("Failed to recreate background download with id {0}: {1}", id, e.Message);
             }
 
             return null;
